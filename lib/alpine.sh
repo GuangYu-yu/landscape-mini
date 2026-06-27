@@ -384,38 +384,45 @@ backend_cleanup() {
     # perf), so we force-delete the files after saving what we need.
     echo "  Removing bloated bpftool dependencies ..."
     run_in_chroot "
-        # perf / trace / cpupower / linux-tools (18MB+)
-        rm -f /usr/bin/perf /usr/bin/trace /usr/bin/cpupower
-        rm -rf /usr/share/perf-core /usr/libexec/perf-core
+        _rm() {
+            local p=\"\$1\" sz
+            [ -e \"\$p\" ] || { echo \"    [WARN] Not found: \$p\"; return; }
+            sz=\$(du -sb \"\$p\" 2>/dev/null | cut -f1)
+            rm -rf \"\$p\"
+            echo \"    Removed \$p (\$((sz/1024/1024))M)\"
+        }
 
-        # binutils — only bpftool needs libbfd/libopcodes at runtime
-        rm -f /usr/bin/dwp /usr/bin/ld /usr/bin/ld.bfd /usr/bin/as
-        rm -f /usr/bin/readelf /usr/bin/objdump /usr/bin/objcopy
-        rm -f /usr/bin/strip /usr/bin/nm /usr/bin/addr2line
-        rm -f /usr/bin/size /usr/bin/ranlib /usr/bin/ar /usr/bin/elfedit
-        rm -f /usr/bin/gprof /usr/bin/c++filt
-        rm -rf /usr/x86_64-alpine-linux-musl
+        echo \"    perf / trace / cpupower / linux-tools\"
+        for c in perf trace cpupower; do p=\$(command -v \$c 2>/dev/null) && _rm \"\$p\"; done
+        _rm /usr/share/perf-core;  _rm /usr/libexec/perf-core
 
-        # python3 — only needed by perf (now removed)
-        rm -rf /usr/lib/python3* /usr/lib/libpython3* /usr/bin/python3*
+        echo \"    binutils (keep libbfd/libopcodes needed by bpftool)\"
+        for f in dwp ld ld.bfd as readelf objdump objcopy strip strings nm addr2line size ranlib ar elfedit gprof c++filt; do
+            _rm /usr/bin/\$f
+        done
+        _rm /usr/x86_64-alpine-linux-musl
 
-        # libslang — only needed by perf TUI
-        rm -f /usr/lib/libslang.so*
-        rm -rf /usr/lib/slang
-        rm -rf /usr/share/slsh
+        echo \"    python (pulled by perf, now removed)\"
+        for d in /usr/lib/python[0-9]* /usr/lib/libpython[0-9]* /usr/bin/python[0-9]*; do _rm \"\$d\"; done
 
-        # libstdc++ — needed by bpftool? check later, keep for safety
+        echo \"    libslang (only needed by perf TUI)\"
+        for f in /usr/lib/libslang.so*; do _rm \"\$f\"; done
+        _rm /usr/lib/slang;  _rm /usr/share/slsh
+
+        # libstdc++ — needed by bpftool? keep for safety
     "
 
     # ---- Remove unnecessary boot/grub files ----
     echo "  Removing unnecessary boot files ..."
-    rm -f "${ROOTFS_DIR}"/boot/System.map-* "${ROOTFS_DIR}"/boot/config-*
+    _rm_boot() { local p="$1"; [ -f "$p" ] || return; local sz; sz=$(stat -c%s "$p" 2>/dev/null || echo 0); rm -f "$p"; echo "    Removed $p ($((sz/1024/1024))M)"; }
+    for f in "${ROOTFS_DIR}"/boot/System.map-* "${ROOTFS_DIR}"/boot/config-*; do _rm_boot "$f"; done
     # GRUB unicode font (2.4MB) — not needed for serial/headless console
-    rm -rf "${ROOTFS_DIR}"/boot/grub/fonts
+    _rm_dir_boot() { local p="$1"; [ -d "$p" ] || return; local sz; sz=$(du -sb "$p" 2>/dev/null | cut -f1); rm -rf "$p"; echo "    Removed $p ($((sz/1024/1024))M)"; }
+    _rm_dir_boot "${ROOTFS_DIR}/boot/grub/fonts"
     # GRUB utilities not needed at runtime (only used during install)
-    rm -f "${ROOTFS_DIR}"/usr/bin/grub-*
-    rm -f "${ROOTFS_DIR}"/usr/sbin/grub-{mkrescue,fstest,render-label,file,syslinux2cfg,sparc64-setup,macbless,ofpathname,mkstandalone}
-    rm -rf "${ROOTFS_DIR}"/usr/share/grub
+    for f in "${ROOTFS_DIR}"/usr/bin/grub-*; do _rm_boot "$f"; done
+    for f in mkrescue fstest render-label file syslinux2cfg sparc64-setup macbless ofpathname mkstandalone; do _rm_boot "${ROOTFS_DIR}/usr/sbin/grub-${f}"; done
+    _rm_dir_boot "${ROOTFS_DIR}/usr/share/grub"
 
     # ---- Rebuild initramfs ----
     echo "  Rebuilding mkinitfs ..."
@@ -427,7 +434,7 @@ backend_cleanup() {
         if [ -n \"\$KVER\" ]; then
             mkinitfs -c /etc/mkinitfs/mkinitfs.conf \"\$KVER\"
         fi
-        rm -f /usr/bin/strings
+        # strings was removed together with binutils above
     "
 
     # ---- Clean apk cache ----

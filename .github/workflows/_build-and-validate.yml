@@ -1,4 +1,4 @@
-name: Build and Validate Image
+name: 构建并校验镜像
 
 on:
   workflow_call:
@@ -116,6 +116,7 @@ env:
 
 jobs:
   build_image:
+    name: 构建镜像
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:
@@ -131,10 +132,10 @@ jobs:
       run_dataplane: ${{ steps.tests.outputs.run_dataplane }}
       dataplane_skip_reason: ${{ steps.tests.outputs.dataplane_skip_reason }}
     steps:
-      - name: Checkout
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Resolve validation metadata
+      - name: 解析校验元数据
         id: meta
         shell: bash
         run: |
@@ -162,7 +163,7 @@ jobs:
             echo "log_artifact=test-logs-$artifact_id"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Normalize requested tests
+      - name: 归一化测试选择
         id: tests
         shell: bash
         run: |
@@ -206,7 +207,7 @@ jobs:
             echo "dataplane_skip_reason=$dataplane_skip_reason"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Render effective topology config
+      - name: 渲染生效拓扑配置
         env:
           LANDSCAPE_LAN_SERVER_IP: ${{ inputs.lan_server_ip }}
           LANDSCAPE_LAN_RANGE_START: ${{ inputs.lan_range_start }}
@@ -218,7 +219,7 @@ jobs:
           mkdir -p output/metadata
           bash .github/scripts/render-effective-topology.sh output/metadata/effective-landscape_init.toml
 
-      - name: Install build dependencies
+      - name: 安装构建依赖
         timeout-minutes: 15
         shell: bash
         run: |
@@ -251,7 +252,7 @@ jobs:
             install -y debootstrap parted dosfstools e2fsprogs \
             grub-efi-amd64-bin grub-pc-bin qemu-utils rsync curl
 
-      - name: Build image (${{ inputs.base_system }}, docker=${{ inputs.include_docker }})
+      - name: 构建镜像（${{ inputs.base_system }}，docker=${{ inputs.include_docker }}）
         timeout-minutes: 9
         env:
           RESOLVED_VERSION: ${{ steps.meta.outputs.resolved_version }}
@@ -329,10 +330,10 @@ jobs:
             attempt=$((attempt + 1))
           done
 
-      - name: Fix output permissions
+      - name: 修复输出权限
         run: sudo chown -R "$(id -u):$(id -g)" output/ work/
 
-      - name: Capture artifact metadata
+      - name: 收集 artifact 元数据
         env:
           RESOLVED_VERSION: ${{ steps.meta.outputs.resolved_version }}
           ARTIFACT_ID: ${{ steps.meta.outputs.artifact_id }}
@@ -408,7 +409,7 @@ jobs:
             cp output/metadata/effective-landscape_init.toml "${TEST_LOG_DIR}/effective-landscape_init.toml"
           fi
 
-      - name: Record test selection
+      - name: 记录测试选择
         shell: bash
         run: |
           set -euo pipefail
@@ -430,10 +431,10 @@ jobs:
               > "${TEST_LOG_DIR}/dataplane-skipped.txt"
           fi
 
-      - name: List outputs
+      - name: 列出输出文件
         run: ls -lh output/
 
-      - name: Upload image artifact
+      - name: 上传镜像构建产物
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.meta.outputs.image_artifact }}
@@ -445,7 +446,7 @@ jobs:
             output/metadata/effective-landscape_init.toml
           retention-days: ${{ inputs.image_retention_days }}
 
-      - name: Upload build log fragment
+      - name: 上传构建日志片段
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -454,21 +455,22 @@ jobs:
           retention-days: ${{ inputs.log_retention_days }}
 
   test_readiness:
+    name: 就绪性测试
     needs: build_image
     if: ${{ needs.build_image.outputs.run_readiness == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - name: Checkout
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Download image artifact
+      - name: 下载镜像构建产物
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_image.outputs.image_artifact }}
           path: output/
 
-      - name: Restore build metadata into test logs
+      - name: 恢复构建元数据到测试日志
         shell: bash
         run: |
           set -euo pipefail
@@ -478,7 +480,7 @@ jobs:
             cp output/metadata/effective-landscape_init.toml output/test-logs/effective-landscape_init.toml
           fi
 
-      - name: Install test dependencies
+      - name: 安装测试依赖
         timeout-minutes: 10
         shell: bash
         run: |
@@ -510,10 +512,10 @@ jobs:
             -o Acquire::https::Timeout=60 \
             install -y sshpass socat curl jq qemu-system-x86 ovmf qemu-utils
 
-      - name: List outputs
+      - name: 列出输出文件
         run: ls -lh output/
 
-      - name: Run readiness checks (${{ inputs.base_system }}, docker=${{ inputs.include_docker }})
+      - name: 运行就绪检查（${{ inputs.base_system }}，docker=${{ inputs.include_docker }}）
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ inputs.base_system }}
           LANDSCAPE_TEST_INCLUDE_DOCKER: ${{ inputs.include_docker }}
@@ -528,7 +530,7 @@ jobs:
           API_PASSWORD: ${{ inputs.api_password }}
         run: timeout --foreground 20m ./tests/test-readiness.sh output/${{ needs.build_image.outputs.build_name }}.img
 
-      - name: Upload readiness log fragment
+      - name: 上传就绪检查日志片段
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -537,21 +539,22 @@ jobs:
           retention-days: ${{ inputs.log_retention_days }}
 
   test_dataplane:
+    name: 数据平面测试
     needs: build_image
     if: ${{ needs.build_image.outputs.run_dataplane == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
-      - name: Checkout
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Download image artifact
+      - name: 下载镜像构建产物
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_image.outputs.image_artifact }}
           path: output/
 
-      - name: Restore build metadata into test logs
+      - name: 恢复构建元数据到测试日志
         shell: bash
         run: |
           set -euo pipefail
@@ -561,7 +564,7 @@ jobs:
             cp output/metadata/effective-landscape_init.toml output/test-logs/effective-landscape_init.toml
           fi
 
-      - name: Install test dependencies
+      - name: 安装测试依赖
         timeout-minutes: 10
         shell: bash
         run: |
@@ -593,10 +596,10 @@ jobs:
             -o Acquire::https::Timeout=60 \
             install -y sshpass socat curl jq qemu-system-x86 ovmf qemu-utils
 
-      - name: List outputs
+      - name: 列出输出文件
         run: ls -lh output/
 
-      - name: Run dataplane tests (${{ inputs.base_system }}, docker=${{ inputs.include_docker }})
+      - name: 运行数据平面测试（${{ inputs.base_system }}，docker=${{ inputs.include_docker }}）
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ inputs.base_system }}
           LANDSCAPE_TEST_INCLUDE_DOCKER: ${{ inputs.include_docker }}
@@ -611,7 +614,7 @@ jobs:
           API_PASSWORD: ${{ inputs.api_password }}
         run: timeout --foreground 25m ./tests/test-dataplane.sh output/${{ needs.build_image.outputs.build_name }}.img
 
-      - name: Upload dataplane log fragment
+      - name: 上传数据平面测试日志片段
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -620,6 +623,7 @@ jobs:
           retention-days: ${{ inputs.log_retention_days }}
 
   merge_validation_logs:
+    name: 合并校验日志
     needs:
       - build_image
       - test_readiness
@@ -627,27 +631,27 @@ jobs:
     if: ${{ always() && needs.build_image.result == 'success' }}
     runs-on: ubuntu-24.04
     steps:
-      - name: Download build log fragment
+      - name: 下载构建日志片段
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_image.outputs.log_artifact }}-build
           path: output/test-logs/build/
 
-      - name: Download readiness log fragment
+      - name: 下载就绪检查日志片段
         if: ${{ needs.build_image.outputs.run_readiness == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_image.outputs.log_artifact }}-readiness
           path: output/test-logs/readiness/
 
-      - name: Download dataplane log fragment
+      - name: 下载数据平面测试日志片段
         if: ${{ needs.build_image.outputs.run_dataplane == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_image.outputs.log_artifact }}-dataplane
           path: output/test-logs/dataplane/
 
-      - name: Merge validation logs
+      - name: 合并校验日志
         shell: bash
         run: |
           set -euo pipefail
@@ -659,7 +663,7 @@ jobs:
           done
           ls -lh output/final-test-logs
 
-      - name: Upload validation logs
+      - name: 上传校验日志
         if: always()
         uses: actions/upload-artifact@v4
         with:

@@ -1,10 +1,10 @@
-name: CI
+name: 持续集成
 
 on:
   workflow_dispatch:
     inputs:
       landscape_version:
-        description: "Landscape version (latest or tag; empty uses build.env default)"
+        description: "Landscape 版本（latest 或标签；留空使用 build.env 默认值）"
         default: ""
   pull_request:
     branches:

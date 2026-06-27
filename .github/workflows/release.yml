@@ -1,4 +1,4 @@
-name: Release
+name: 发布
 
 on:
   push:
@@ -11,12 +11,13 @@ concurrency:
 
 jobs:
   prepare:
+    name: 准备发布元数据
     runs-on: ubuntu-24.04
     outputs:
       release_tag: ${{ steps.meta.outputs.release_tag }}
       target_sha: ${{ steps.meta.outputs.target_sha }}
     steps:
-      - name: Resolve release metadata
+      - name: 解析发布元数据
         id: meta
         shell: bash
         run: |
@@ -27,6 +28,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   build_debian_no_docker:
+    name: 构建 Debian（不含 Docker）
     needs: prepare
     permissions:
       actions: read
@@ -43,6 +45,7 @@ jobs:
       repository_owner: ${{ github.repository_owner }}
 
   build_debian_docker:
+    name: 构建 Debian（含 Docker）
     needs: prepare
     permissions:
       actions: read
@@ -59,6 +62,7 @@ jobs:
       repository_owner: ${{ github.repository_owner }}
 
   release:
+    name: 发布版本
     needs:
       - prepare
       - build_debian_no_docker
@@ -68,19 +72,19 @@ jobs:
       actions: read
       contents: write
     steps:
-      - name: Download Debian no-Docker artifact
+      - name: 下载 Debian 不含 Docker 构建产物
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_debian_no_docker.outputs.image_artifact }}
           path: artifacts/debian-no-docker/
 
-      - name: Download Debian Docker artifact
+      - name: 下载 Debian 含 Docker 构建产物
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build_debian_docker.outputs.image_artifact }}
           path: artifacts/debian-docker/
 
-      - name: Validate release artifacts
+      - name: 校验发布产物
         shell: bash
         env:
           TARGET_SHA: ${{ needs.prepare.outputs.target_sha }}
@@ -164,7 +168,7 @@ jobs:
             exit 1
           fi
 
-      - name: Compress raw images
+      - name: 压缩 raw 镜像
         shell: bash
         run: |
           set -euo pipefail
@@ -173,30 +177,30 @@ jobs:
             gzip -k "$f"
           done
 
-      - name: Write release summary
+      - name: 写发布摘要
         shell: bash
         run: |
           set -euo pipefail
           release_url="https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.release_tag }}"
           {
-            echo "## Release rebuild"
+            echo "## 发布重建"
             echo ""
-            echo "| Field | Value |"
+            echo "| 字段 | 值 |"
             echo "| --- | --- |"
-            echo "| Tag | ${{ needs.prepare.outputs.release_tag }} |"
-            echo "| Source commit | ${{ needs.prepare.outputs.target_sha }} |"
-            echo "| Build mode | rebuild on tag push (no CI artifact promotion) |"
-            echo "| Tuple coverage | debian × include_docker true/false |"
-            echo "| Published files | .img.gz + .ova |"
-            echo "| Release page | ${release_url} |"
+            echo "| 标签 | ${{ needs.prepare.outputs.release_tag }} |"
+            echo "| 源提交 | ${{ needs.prepare.outputs.target_sha }} |"
+            echo "| 构建模式 | 标签推送时重建（不使用 CI 产物升级） |"
+            echo "| 覆盖范围 | debian × include_docker true/false |"
+            echo "| 发布文件 | .img.gz + .ova |"
+            echo "| 发布页面 | ${release_url} |"
             echo ""
-            echo "| Asset group | Intended use |"
+            echo "| 资源组 | 用途 |"
             echo "| --- | --- |"
-            echo "| .img.gz | compressed raw image for direct install or flashing |"
-            echo "| .ova | virtual appliance import package |"
+            echo "| .img.gz | 压缩 raw 镜像，用于直接安装或刷写 |"
+            echo "| .ova | 虚拟设备导入包 |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Create GitHub Release
+      - name: 创建 GitHub 发布
         uses: softprops/action-gh-release@v2
         with:
           files: |

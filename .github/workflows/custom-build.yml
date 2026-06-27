@@ -1,10 +1,10 @@
-name: Custom Build
+name: 自定义构建
 
 on:
   workflow_dispatch:
     inputs:
       base_system:
-        description: "基础系统（首次推荐 debian）\nBase system (debian recommended for first-time users)"
+        description: "基础系统（首次推荐 debian）"
         required: true
         default: debian
         type: choice
@@ -12,7 +12,7 @@ on:
           - debian
           - alpine
       include_docker:
-        description: "是否包含 Docker\nInclude Docker"
+        description: "是否包含 Docker"
         required: true
         default: 'false'
         type: choice
@@ -20,39 +20,40 @@ on:
           - 'false'
           - 'true'
       output_formats:
-        description: "输出格式：img=raw 镜像，vmdk=VMDK，ova=生成 .ova；首次建议 img，PVE 建议 img,ova\nOutput formats: img=raw image, vmdk=VMDK, ova=downloadable .ova; first run: img, for PVE: img,ova"
+        description: "输出格式：img=raw 镜像，vmdk=VMDK，ova=生成 .ova；首次建议 img，PVE 建议 img,ova"
         default: "img"
       landscape_version:
-        description: "Landscape 版本（留空时使用 build.env 默认值）\nLandscape version (empty uses build.env default)"
+        description: "Landscape 版本（留空时使用 build.env 默认值）"
         default: ""
       lan_server_ip:
-        description: "LAN 网关或 DHCP 服务 IP（可选）\nLAN gateway / DHCP server IP (optional)"
+        description: "LAN 网关或 DHCP 服务 IP（可选）"
         default: ""
       lan_range_start:
-        description: "LAN DHCP 起始地址（可选）\nLAN DHCP range start (optional)"
+        description: "LAN DHCP 起始地址（可选）"
         default: ""
       lan_range_end:
-        description: "LAN DHCP 结束地址（可选）\nLAN DHCP range end (optional)"
+        description: "LAN DHCP 结束地址（可选）"
         default: ""
       lan_netmask:
-        description: "LAN 子网前缀长度，例如 24（可选）\nLAN subnet prefix length, e.g. 24 (optional)"
+        description: "LAN 子网前缀长度，例如 24（可选）"
         default: ""
       root_password:
-        description: "Linux root/ld 登录密码（如特别注重安全，请改用 GitHub Secrets）\nLinux root/ld password (if security matters, prefer GitHub Secrets)"
+        description: "Linux root/ld 登录密码（如特别注重安全，请改用 GitHub Secrets）"
         default: ""
       api_username:
-        description: "Web 管理用户名（如特别注重安全，请改用 GitHub Secrets）\nWeb admin username (if security matters, prefer GitHub Secrets)"
+        description: "Web 管理用户名（如特别注重安全，请改用 GitHub Secrets）"
         default: ""
       api_password:
-        description: "Web 管理密码（如特别注重安全，请改用 GitHub Secrets）\nWeb admin password (if security matters, prefer GitHub Secrets)"
+        description: "Web 管理密码（如特别注重安全，请改用 GitHub Secrets）"
         default: ""
       run_test:
-        description: "测试选择：留空/none、readiness、readiness,dataplane\nTest selection: empty/none, readiness, readiness,dataplane"
+        description: "测试选择：留空/none、readiness、readiness,dataplane"
         default: ""
         type: string
 
 jobs:
   prepare:
+    name: 准备构建配置
     runs-on: ubuntu-24.04
     outputs:
       config_profile: ${{ steps.meta.outputs.config_profile }}
@@ -66,7 +67,7 @@ jobs:
       output_formats: ${{ steps.validate.outputs.output_formats }}
       run_test: ${{ steps.validate.outputs.run_test }}
     steps:
-      - name: Validate workflow inputs early
+      - name: 提前校验工作流输入
         id: validate
         shell: bash
         env:
@@ -200,7 +201,7 @@ jobs:
             echo "run_test=$RUN_TEST_NORMALIZED"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Resolve config metadata
+      - name: 解析配置元数据
         id: meta
         shell: bash
         run: |
@@ -218,7 +219,7 @@ jobs:
             echo "topology_source=$topology_source"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Resolve credentials with precedence
+      - name: 按优先级解析凭据
         id: creds
         env:
           INPUT_ROOT_PASSWORD: ${{ github.event.inputs.root_password }}
@@ -273,7 +274,7 @@ jobs:
             echo "api_password_source=$api_password_source"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Prepare build summary
+      - name: 准备构建摘要
         shell: bash
         run: |
           set -euo pipefail
@@ -310,6 +311,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
+    name: 构建镜像
     needs: prepare
     permissions:
       actions: read
@@ -340,6 +342,7 @@ jobs:
       build_timeout_minutes: 10
 
   publish-fixed-release:
+    name: 发布固定版本
     needs: build
     runs-on: ubuntu-24.04
     if: ${{ github.event_name == 'workflow_dispatch' && needs.build.result == 'success' }}
@@ -352,13 +355,13 @@ jobs:
       RELEASE_TAG: custom-build-latest
       WORKFLOW_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - name: Download image artifact
+      - name: 下载镜像构建产物
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.image_artifact }}
           path: dist/
 
-      - name: Prepare fixed-release assets
+      - name: 准备固定发布资源
         id: assets
         shell: bash
         run: |
@@ -485,7 +488,7 @@ jobs:
             echo "produced_files=$(awk -F= '/^produced_files=/{print $2; exit}' release-assets/latest/build-metadata.txt)"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Publish immutable history release
+      - name: 发布不可变历史版本
         shell: bash
         env:
           HISTORY_TAG: ${{ steps.assets.outputs.history_tag }}
@@ -516,7 +519,7 @@ jobs:
             --notes "Immutable custom build result for artifact ${HISTORY_TAG#custom-build-}." \
             --prerelease
 
-      - name: Publish or update latest release
+      - name: 发布或更新最新版本
         shell: bash
         run: |
           set -euo pipefail
@@ -572,7 +575,7 @@ jobs:
           fi
 
 
-      - name: Publish fixed-release summary
+      - name: 发布固定版本摘要
         shell: bash
         env:
           HISTORY_TAG: ${{ steps.assets.outputs.history_tag }}

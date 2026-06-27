@@ -1,29 +1,30 @@
-name: Test Image
+name: 镜像测试
 
 on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: "构建 workflow run ID（留空时自动使用 main 上最新成功 CI）\nBuild workflow run ID (leave empty for latest successful CI run on main)"
+        description: "构建 workflow run ID（留空时自动使用 main 上最新成功 CI）"
         default: ""
       artifact_id:
-        description: "Artifact 标识：<base_system>-docker-<include_docker>-<version>-<sha12>-<runid>（留空时自动解析最新）\nArtifact id: <base_system>-docker-<include_docker>-<version>-<sha12>-<runid> (leave empty to auto-resolve latest)"
+        description: "Artifact 标识：<base_system>-docker-<include_docker>-<version>-<sha12>-<runid>（留空时自动解析最新）"
         default: ""
       landscape_version:
-        description: "用于校验 metadata 的 Landscape 版本（可选）\nExpected Landscape version for metadata (optional)"
+        description: "用于校验 metadata 的 Landscape 版本（可选）"
         default: ""
       ssh_password:
-        description: "复测用 Linux SSH 密码（如特别注重安全，请改用 GitHub Secrets）\nLinux SSH password for retest (if security matters, prefer GitHub Secrets)"
+        description: "复测用 Linux SSH 密码（如特别注重安全，请改用 GitHub Secrets）"
         default: ""
       api_username:
-        description: "复测用 Web 管理用户名（如特别注重安全，请改用 GitHub Secrets）\nWeb admin username for retest (if security matters, prefer GitHub Secrets)"
+        description: "复测用 Web 管理用户名（如特别注重安全，请改用 GitHub Secrets）"
         default: ""
       api_password:
-        description: "复测用 Web 管理密码（如特别注重安全，请改用 GitHub Secrets）\nWeb admin password for retest (if security matters, prefer GitHub Secrets)"
+        description: "复测用 Web 管理密码（如特别注重安全，请改用 GitHub Secrets）"
         default: ""
 
 jobs:
   test:
+    name: 运行测试
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -35,10 +36,10 @@ jobs:
           - base_system: debian
             include_docker: 'true'
     steps:
-      - name: Checkout
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Resolve retest credentials
+      - name: 解析复测凭据
         id: creds
         env:
           INPUT_SSH_PASSWORD: ${{ github.event.inputs.ssh_password }}
@@ -81,7 +82,7 @@ jobs:
             echo "api_password=$api_password"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Install test dependencies
+      - name: 安装测试依赖
         timeout-minutes: 10
         shell: bash
         run: |
@@ -113,7 +114,7 @@ jobs:
             -o Acquire::https::Timeout=60 \
             install -y sshpass socat curl jq qemu-system-x86 ovmf unzip
 
-      - name: Resolve artifact names
+      - name: 解析 artifact 名称
         if: ${{ github.event.inputs.artifact_id == '' || startsWith(github.event.inputs.artifact_id, format('{0}-docker-{1}-', matrix.base_system, matrix.include_docker)) }}
         id: meta
         env:
@@ -156,7 +157,7 @@ jobs:
             echo "log_artifact=test-logs-$artifact_id"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Download image artifact
+      - name: 下载镜像构建产物
         if: ${{ steps.meta.conclusion == 'success' }}
         uses: actions/download-artifact@v4
         with:
@@ -165,7 +166,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.meta.outputs.resolved_run_id }}
 
-      - name: Restore build metadata into test logs
+      - name: 恢复构建元数据到测试日志
         if: ${{ steps.meta.conclusion == 'success' }}
         shell: bash
         run: |
@@ -188,11 +189,11 @@ jobs:
             cp output/metadata/effective-landscape_init.toml output/test-logs/effective-landscape_init.toml
           fi
 
-      - name: List outputs
+      - name: 列出输出文件
         if: ${{ steps.meta.conclusion == 'success' }}
         run: ls -lh output/
 
-      - name: Run readiness checks (${{ matrix.base_system }}, docker=${{ matrix.include_docker }})
+      - name: 运行就绪检查（${{ matrix.base_system }}，docker=${{ matrix.include_docker }}）
         if: ${{ steps.meta.conclusion == 'success' }}
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ matrix.base_system }}
@@ -206,7 +207,7 @@ jobs:
           API_PASSWORD: ${{ steps.creds.outputs.api_password }}
         run: timeout --foreground 20m ./tests/test-readiness.sh output/*.img
 
-      - name: Run dataplane tests (${{ matrix.base_system }}, docker=${{ matrix.include_docker }})
+      - name: 运行数据平面测试（${{ matrix.base_system }}，docker=${{ matrix.include_docker }}）
         if: ${{ steps.meta.conclusion == 'success' && matrix.include_docker == 'false' }}
         env:
           LANDSCAPE_TEST_BASE_SYSTEM: ${{ matrix.base_system }}
@@ -220,7 +221,7 @@ jobs:
           API_PASSWORD: ${{ steps.creds.outputs.api_password }}
         run: timeout --foreground 25m ./tests/test-dataplane.sh output/*.img
 
-      - name: Upload test logs
+      - name: 上传测试日志
         if: ${{ always() && steps.meta.conclusion == 'success' }}
         uses: actions/upload-artifact@v4
         with:
